@@ -1,0 +1,157 @@
+storage:
+  type: sqlite
+  mysql:
+    host: localhost
+    port: 3306
+    database: clientwatch
+    username: root
+    password: ''
+privacy:
+  store-ip-addresses: true
+detection:
+  collect-client-brand: true
+  brand-timeout-seconds: 8
+blacklist:
+  mods:
+    - meteor-client
+    - meteor
+    - wurst
+    - aristois
+    - inertia
+    - impact
+    - sigma
+    - future-client
+    - future
+    - lambda
+    - kami-blue
+    - bleachhack
+    - liquidbounce
+    - fdpclient
+    - fdp-reborn
+    - novoline
+    - exhibition
+    - vape
+    - thunderhack
+    - rusherhack
+    - pyro
+    - catalyst
+    - wwe-client
+    - forgehax
+    - nullhack
+    - earthhack
+    - coffee-client
+    - aurora
+    - celestial
+    - freecam
+    - xray
+    - xray-ultimate
+    - xray-mod
+    - baritone
+    - automine
+    - autowalk
+    - autoclicker
+    - chestesp
+    - entityesp
+    - playeresp
+    - tracers
+    - fullbright
+    - autofish
+    - killaura
+    - triggerbot
+    - reach
+    - noslow
+    - velocity
+    - timer
+    - scaffold
+    - fastbreak
+    - nuker
+    - fly
+    - elytrafly
+    - jesus
+    - blink
+  clients:
+    - Meteor Client
+    - Meteor
+    - Wurst
+    - Aristois
+    - Inertia
+    - Impact
+    - Sigma
+    - Future Client
+    - Lambda
+    - Kami Blue
+    - BleachHack
+    - LiquidBounce
+    - FDPClient
+    - FDP Reborn
+    - Novoline
+    - Exhibition
+    - Vape
+    - ThunderHack
+    - RusherHack
+    - Pyro
+    - Catalyst
+    - WWE Client
+    - ForgeHax
+    - NullHack
+    - EarthHack
+    - Coffee Client
+    - Aurora
+    - Celestial
+  loaders:
+    - UnknownLoader
+    - UNKNOWN
+gui:
+  enabled: true
+  search: true
+  filters:
+    loader: true
+    blacklist: true
+  sorting:
+    mod-count: true
+    client: true
+  quick-refresh: true
+whitelist:
+  mods: []
+  clients: []
+  loaders: []
+actions:
+  kick:
+    enabled: true
+    reason: '&cYour client is not allowed on this server.'
+  ban:
+    enabled: false
+    command: ban {player} ClientWatch blacklist match: {matches}
+  console-message:
+    enabled: true
+  staff-message:
+    enabled: true
+  broadcast:
+    enabled: false
+  actionbar:
+    enabled: false
+  title:
+    enabled: false
+  log-file:
+    enabled: true
+discord:
+  enabled: false
+  webhook-url: ''
+  include-server-name: true
+  include-plugin-version: true
+  include-player-avatar: true
+  include-timestamp: true
+  severity-colors:
+    low: 5763719
+    medium: 16705372
+    high: 15548997
+logging:
+  enabled: true
+history:
+  max-entries-per-player: 50
+update-checker:
+  enabled: true
+  modrinth-project: clientwatch
+  interval-hours: 6
+cache:
+  expire-minutes: 60

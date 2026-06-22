@@ -1,0 +1,21 @@
+name: ClientWatch
+version: ${project.version}
+main: com.clientwatch.ClientWatchPlugin
+api-version: '1.21'
+author: ClientWatch
+description: Reliable Minecraft client inspection for Paper servers.
+commands:
+  clientwatch:
+    description: Main ClientWatch command.
+    usage: /clientwatch
+    aliases: [cw]
+permissions:
+  clientwatch.admin:
+    description: Allows all ClientWatch administration commands.
+    default: op
+  clientwatch.inspect:
+    description: Allows inspecting collected player client information.
+    default: op
+  clientwatch.alerts:
+    description: Allows toggling staff alerts.
+    default: op
