@@ -75,10 +75,13 @@ public final class ClientDetectionService implements PluginMessageListener {
 
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
         plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FML_HANDSHAKE_CHANNEL);
-    
+    }
 
     public void detect(Player player) {
         long delay = Math.max(20L, plugin.getConfig().getLong("detection.brand-timeout-seconds", 8L) * 20L);
+        if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+            plugin.getLogger().info("[debug] Scheduling saveDetection for " + player.getName() + " (in " + delay + " ticks) - uuid=" + player.getUniqueId());
+        }
         Bukkit.getScheduler().runTaskLater(plugin, () -> saveDetection(player), delay);
     }
 
@@ -106,6 +109,9 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     private void saveDetection(Player player) {
         if (!player.isOnline()) {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] saveDetection skipped (player not online): " + player.getName());
+            }
             return;
         }
         long startedAt = System.nanoTime();
@@ -115,6 +121,18 @@ public final class ClientDetectionService implements PluginMessageListener {
         List<String> warnings = analyzer.analyze(brand, mods);
         Instant detectedAt = Instant.now();
         long durationMillis = Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+
+        if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+            plugin.getLogger().info(
+                "[debug] saveDetection for " + player.getName() +
+                " uuid=" + player.getUniqueId() +
+                " resolvedBrand=" + brand +
+                " mods=" + mods.size() +
+                " loader=" + loader +
+                " warnings=" + warnings.size()
+            );
+        }
+
         ClientDetection base = new ClientDetection(
             player.getUniqueId(),
             player.getName(),
@@ -141,8 +159,16 @@ public final class ClientDetectionService implements PluginMessageListener {
             base.serverBrand(), base.address(), base.detectedAt(), base.detectionDurationMillis(), base.warnings(), matches
         );
         repository.save(detection).thenRun(() -> {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] repository.save completed for " + detection.playerName() + " uuid=" + detection.uuid());
+            }
             Bukkit.getPluginManager().callEvent(new PlayerClientDetectEvent(detection, true));
             logService.write(detection);
+        }).exceptionally(ex -> {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().severe("[debug] repository.save failed for " + player.getName() + ": " + ex);
+            }
+            return null;
         });
         if (!matches.isEmpty()) {
             Bukkit.getPluginManager().callEvent(new PlayerBlacklistedModEvent(detection, true));
