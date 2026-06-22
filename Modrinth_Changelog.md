@@ -8,6 +8,7 @@
 ## Fixed
 
 - Fix/cleanup YAML config keys to keep config.yml parseable.
+- Fix Paper/Purpur async safety: `PlayerClientDetectEvent` (and `PlayerBlacklistedModEvent`) are now dispatched on the main thread, preventing `PlayerClientDetectEvent may only be triggered asynchronously`.
 
 # ClientWatch 0.1.6
 

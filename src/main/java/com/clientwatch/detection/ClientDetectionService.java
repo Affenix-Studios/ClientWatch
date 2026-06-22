@@ -82,7 +82,12 @@ public final class ClientDetectionService implements PluginMessageListener {
         if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
             plugin.getLogger().info("[debug] Scheduling saveDetection for " + player.getName() + " (in " + delay + " ticks) - uuid=" + player.getUniqueId());
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> saveDetection(player), delay);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] saveDetection runnable started for " + player.getName() + " (uuid=" + player.getUniqueId() + ")");
+            }
+            saveDetection(player);
+        }, delay);
     }
 
     @Override
@@ -108,6 +113,9 @@ public final class ClientDetectionService implements PluginMessageListener {
     }
 
     private void saveDetection(Player player) {
+        if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+            plugin.getLogger().info("[debug] saveDetection() entered for " + player.getName() + " uuid=" + player.getUniqueId());
+        }
         if (!player.isOnline()) {
             if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
                 plugin.getLogger().info("[debug] saveDetection skipped (player not online): " + player.getName());
@@ -162,8 +170,10 @@ public final class ClientDetectionService implements PluginMessageListener {
             if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
                 plugin.getLogger().info("[debug] repository.save completed for " + detection.playerName() + " uuid=" + detection.uuid());
             }
-            Bukkit.getPluginManager().callEvent(new PlayerClientDetectEvent(detection, true));
-            logService.write(detection);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Bukkit.getPluginManager().callEvent(new PlayerClientDetectEvent(detection, true));
+                logService.write(detection);
+            });
         }).exceptionally(ex -> {
             if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
                 plugin.getLogger().severe("[debug] repository.save failed for " + player.getName() + ": " + ex);
@@ -171,8 +181,10 @@ public final class ClientDetectionService implements PluginMessageListener {
             return null;
         });
         if (!matches.isEmpty()) {
-            Bukkit.getPluginManager().callEvent(new PlayerBlacklistedModEvent(detection, true));
-            actionService.handleBlacklistMatch(detection);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Bukkit.getPluginManager().callEvent(new PlayerBlacklistedModEvent(detection, true));
+                actionService.handleBlacklistMatch(detection);
+            });
         }
     }
 
