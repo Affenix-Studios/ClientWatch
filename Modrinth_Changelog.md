@@ -1,4 +1,23 @@
-# ClientWatch 0.1.5
+# ClientWatch 0.1.7
+
+## Added
+
+- Channel-log (startup): log the registered plugin-message channels.
+- UNKNOWN/missing-loader login protection (unchanged): deny join when the loader cannot be verified.
+
+## Fixed
+
+- Fix/cleanup YAML config keys to keep config.yml parseable.
+
+# ClientWatch 0.1.6
+
+## Fixed
+
+- Fix crash on startup: invalid plugin-messaging channel `FML|HS` (now uses `fml:hs`).
+
+## Added
+
+- Login-time protection: kick player when loader resolves to `UNKNOWN` or when loader cannot be verified (modhider-like behavior).
 
 Fabric mod detection fix: correctly parse and recognize Fabric loader mod lists from client-reported plugin channels.
 

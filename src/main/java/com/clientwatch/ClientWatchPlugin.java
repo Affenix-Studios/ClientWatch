@@ -5,6 +5,7 @@ import com.clientwatch.command.ClientWatchCommand;
 import com.clientwatch.config.MessageService;
 import com.clientwatch.detection.ClientDetectionService;
 import com.clientwatch.detection.JoinListener;
+import com.clientwatch.detection.PreJoinListener;
 import com.clientwatch.service.ActionService;
 import com.clientwatch.service.BlacklistService;
 import com.clientwatch.service.DetectionLogService;
@@ -64,6 +65,7 @@ public final class ClientWatchPlugin extends JavaPlugin {
         api = new ClientWatchApi(repository, exportService);
         detectionService = new ClientDetectionService(this, repository, blacklistService, actionService, logService);
         detectionService.register();
+        getServer().getPluginManager().registerEvents(new PreJoinListener(detectionService, blacklistService, messages), this);
         getServer().getPluginManager().registerEvents(new JoinListener(detectionService), this);
 
         updateChecker = new UpdateChecker(this);

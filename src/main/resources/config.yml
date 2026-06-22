@@ -120,7 +120,15 @@ actions:
   kick:
     enabled: true
     reason: '&cYour client is not allowed on this server.'
+block:
+  unknown-loader:
+    enabled: true
+    reason: '&cYour client/loader could not be verified. Please use Vanilla/Fabric/Forge clients.'
+loader-detection:
+  deny-unknown-loader: true
+  deny-missing-brand-and-mods: true
   ban:
+
     enabled: false
     command: "ban {player} ClientWatch blacklist match: {matches}"
   console-message:

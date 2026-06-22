@@ -23,7 +23,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class ClientDetectionService implements PluginMessageListener {
     private static final String BRAND_CHANNEL = "minecraft:brand";
-    private static final String FML_HANDSHAKE_CHANNEL = "FML|HS";
+
+    public JavaPlugin getPlugin() { return plugin; }
+
+    // Paper/Bukkit plugin messaging channels must be in the form "namespace:channel".
+    // The old implementation used "FML|HS" which crashes plugin enable/disable.
+    private static final String FML_HANDSHAKE_CHANNEL = "fml:hs";
 
     private final JavaPlugin plugin;
     private final DetectionRepository repository;
@@ -35,6 +40,19 @@ public final class ClientDetectionService implements PluginMessageListener {
     private final Map<UUID, String> brands = new ConcurrentHashMap<>();
     private final Map<UUID, List<ModInfo>> playerMods = new ConcurrentHashMap<>();
 
+    public String getBrand(UUID uuid) {
+        return brands.get(uuid);
+    }
+
+    public List<ModInfo> getMods(UUID uuid) {
+        return playerMods.getOrDefault(uuid, List.of());
+    }
+
+    public ClientLoader resolveLoader(String brand, List<ModInfo> mods) {
+        return loaderResolver.resolve(brand, mods);
+    }
+
+
     public ClientDetectionService(JavaPlugin plugin, DetectionRepository repository, BlacklistService blacklistService, ActionService actionService, DetectionLogService logService) {
         this.plugin = plugin;
         this.repository = repository;
@@ -45,13 +63,19 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     public void register() {
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, BRAND_CHANNEL, this);
+        plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + BRAND_CHANNEL);
+
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
+        plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + FML_HANDSHAKE_CHANNEL);
     }
 
     public void unregister() {
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, BRAND_CHANNEL, this);
+        plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + BRAND_CHANNEL);
+
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
-    }
+        plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FML_HANDSHAKE_CHANNEL);
+    
 
     public void detect(Player player) {
         long delay = Math.max(20L, plugin.getConfig().getLong("detection.brand-timeout-seconds", 8L) * 20L);
