@@ -26,9 +26,33 @@ public final class ClientWatchPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
+        // Ensure config loads safely and recover from malformed YAML
+        try {
+            saveDefaultConfig();
+            reloadConfig();
+        } catch (Exception e) {
+            getLogger().warning("Could not load config.yml: " + e.getMessage());
+            try {
+                java.nio.file.Path cfg = getDataFolder().toPath().resolve("config.yml");
+                if (java.nio.file.Files.exists(cfg)) {
+                    java.nio.file.Path backup = getDataFolder().toPath().resolve("config.yml.broken." + System.currentTimeMillis());
+                    java.nio.file.Files.move(cfg, backup);
+                    getLogger().warning("Backed up broken config to " + backup.getFileName());
+                }
+                saveResource("config.yml", false);
+                reloadConfig();
+            } catch (Exception ex) {
+                getLogger().severe("Failed to recover config.yml: " + ex.getMessage());
+            }
+        }
+
         messages = new MessageService(this);
-        messages.reload();
+        try {
+            messages.reload();
+        } catch (Exception e) {
+            getLogger().warning("Could not load messages.yml: " + e.getMessage());
+        }
+
         blacklistService = new BlacklistService();
         blacklistService.reload(getConfig());
 
@@ -57,6 +81,10 @@ public final class ClientWatchPlugin extends JavaPlugin {
 
     public ClientWatchApi api() {
         return api;
+    }
+
+    public boolean isDebugEnabled() {
+        return getConfig().getBoolean("debug", false);
     }
 
     @Override

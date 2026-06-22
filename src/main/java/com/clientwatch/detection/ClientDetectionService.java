@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class ClientDetectionService implements PluginMessageListener {
     private static final String BRAND_CHANNEL = "minecraft:brand";
+    private static final String FML_HANDSHAKE_CHANNEL = "FML|HS";
 
     private final JavaPlugin plugin;
     private final DetectionRepository repository;
@@ -32,6 +33,7 @@ public final class ClientDetectionService implements PluginMessageListener {
     private final LoaderResolver loaderResolver = new LoaderResolver();
     private final DetectionAnalyzer analyzer = new DetectionAnalyzer();
     private final Map<UUID, String> brands = new ConcurrentHashMap<>();
+    private final Map<UUID, List<ModInfo>> playerMods = new ConcurrentHashMap<>();
 
     public ClientDetectionService(JavaPlugin plugin, DetectionRepository repository, BlacklistService blacklistService, ActionService actionService, DetectionLogService logService) {
         this.plugin = plugin;
@@ -43,10 +45,12 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     public void register() {
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, BRAND_CHANNEL, this);
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
     }
 
     public void unregister() {
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, BRAND_CHANNEL, this);
+        plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
     }
 
     public void detect(Player player) {
@@ -56,12 +60,24 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!BRAND_CHANNEL.equals(channel)) {
-            return;
+        if (BRAND_CHANNEL.equals(channel)) {
+            // store brand from plugin message and schedule save on the main thread
+            String decoded = decodeBrand(message);
+            brands.put(player.getUniqueId(), decoded);
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] Received plugin-brand for " + player.getName() + ": " + decoded);
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> saveDetection(player));
+        } else if (FML_HANDSHAKE_CHANNEL.equals(channel)) {
+            // Parse Fabric/Forge mod handshake and store mods
+            List<ModInfo> mods = parseFmlHandshake(message);
+            if (!mods.isEmpty()) {
+                playerMods.put(player.getUniqueId(), mods);
+                if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                    plugin.getLogger().info("[debug] Parsed " + mods.size() + " mods from FML|HS for " + player.getName());
+                }
+            }
         }
-        // store brand from plugin message and schedule save on the main thread
-        brands.put(player.getUniqueId(), decodeBrand(message));
-        Bukkit.getScheduler().runTask(plugin, () -> saveDetection(player));
     }
 
     private void saveDetection(Player player) {
@@ -70,7 +86,7 @@ public final class ClientDetectionService implements PluginMessageListener {
         }
         long startedAt = System.nanoTime();
         String brand = resolveBrand(player);
-        List<ModInfo> mods = List.of();
+        List<ModInfo> mods = playerMods.getOrDefault(player.getUniqueId(), List.of());
         ClientLoader loader = loaderResolver.resolve(brand, mods);
         List<String> warnings = analyzer.analyze(brand, mods);
         Instant detectedAt = Instant.now();
@@ -117,6 +133,9 @@ public final class ClientDetectionService implements PluginMessageListener {
         VarInt stringLength = readVarInt(message);
         // bytesRead < 0 indicates an invalid VarInt
         if (stringLength.bytesRead() < 0) {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] Invalid VarInt in brand payload");
+            }
             return "Unknown";
         }
         int start = stringLength.bytesRead();
@@ -135,10 +154,16 @@ public final class ClientDetectionService implements PluginMessageListener {
         }
         if (isKnown(paperBrand)) {
             brands.put(player.getUniqueId(), paperBrand);
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] Using Paper brand for " + player.getName() + ": " + paperBrand);
+            }
             return paperBrand;
         }
         String pluginMessageBrand = brands.get(player.getUniqueId());
         if (isKnown(pluginMessageBrand)) {
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] Using plugin-message brand for " + player.getName() + ": " + pluginMessageBrand);
+            }
             return pluginMessageBrand;
         }
         return "Unknown";
@@ -160,6 +185,66 @@ public final class ClientDetectionService implements PluginMessageListener {
             position += 7;
         }
         return new VarInt(0, -1);
+    }
+
+    private List<ModInfo> parseFmlHandshake(byte[] message) {
+        // FML|HS handshake format: [handshakeId:byte] [modListSize:varint] [modId:string modName:string version:string ?required:boolean]
+        // Skip handshake ID (1 byte) and parse mod list
+        if (message.length < 2) {
+            return List.of();
+        }
+        int offset = 1; // skip handshake type byte
+        VarInt modCount = readVarIntAt(message, offset);
+        if (modCount.bytesRead() < 0 || modCount.value() <= 0) {
+            return List.of();
+        }
+        offset += modCount.bytesRead();
+        List<ModInfo> mods = new java.util.ArrayList<>();
+        for (int i = 0; i < modCount.value() && offset < message.length; i++) {
+            String modId = readStringAt(message, offset);
+            if (modId == null) break;
+            offset += calculateStringSize(message, offset);
+            String modName = readStringAt(message, offset);
+            if (modName == null) break;
+            offset += calculateStringSize(message, offset);
+            String version = readStringAt(message, offset);
+            if (version == null) break;
+            offset += calculateStringSize(message, offset);
+            if (!modId.isBlank()) {
+                mods.add(new ModInfo(modId, modName != null ? modName : modId, version != null ? version : ""));
+            }
+        }
+        return mods;
+    }
+
+    private VarInt readVarIntAt(byte[] bytes, int startOffset) {
+        int value = 0;
+        int position = 0;
+        for (int index = 0; index < Math.min(bytes.length - startOffset, 5); index++) {
+            int current = bytes[startOffset + index] & 0xFF;
+            value |= (current & 0x7F) << position;
+            if ((current & 0x80) == 0) {
+                return new VarInt(value, index + 1);
+            }
+            position += 7;
+        }
+        return new VarInt(0, -1);
+    }
+
+    private String readStringAt(byte[] bytes, int startOffset) {
+        if (startOffset >= bytes.length) return null;
+        VarInt length = readVarIntAt(bytes, startOffset);
+        if (length.bytesRead() < 0 || length.value() <= 0) return "";
+        int stringStart = startOffset + length.bytesRead();
+        int stringEnd = Math.min(stringStart + length.value(), bytes.length);
+        return new String(bytes, stringStart, stringEnd - stringStart, StandardCharsets.UTF_8).trim();
+    }
+
+    private int calculateStringSize(byte[] bytes, int startOffset) {
+        if (startOffset >= bytes.length) return 0;
+        VarInt length = readVarIntAt(bytes, startOffset);
+        if (length.bytesRead() < 0) return 0;
+        return length.bytesRead() + length.value();
     }
 
     private record VarInt(int value, int bytesRead) {

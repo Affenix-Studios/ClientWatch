@@ -1,3 +1,4 @@
+debug: false
 storage:
   type: sqlite
   mysql:
@@ -121,7 +122,7 @@ actions:
     reason: '&cYour client is not allowed on this server.'
   ban:
     enabled: false
-    command: ban {player} ClientWatch blacklist match: {matches}
+    command: "ban {player} ClientWatch blacklist match: {matches}"
   console-message:
     enabled: true
   staff-message:
