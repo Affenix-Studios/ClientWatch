@@ -81,4 +81,5 @@ ClientWatch also provides an API facade for latest detections, online detection 
 
 ## Development Status
 
+
 ClientWatch is currently in early development. The foundation is implemented, and future releases are planned to add persistent database backends, an inventory GUI, and more advanced detection modules.

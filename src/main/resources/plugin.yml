@@ -4,6 +4,7 @@ main: com.clientwatch.ClientWatchPlugin
 api-version: '1.21'
 author: ClientWatch
 description: Reliable Minecraft client inspection for Paper servers.
+
 commands:
   clientwatch:
     description: Main ClientWatch command.
@@ -19,3 +20,4 @@ permissions:
   clientwatch.alerts:
     description: Allows toggling staff alerts.
     default: op
+

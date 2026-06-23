@@ -1,4 +1,19 @@
+# ClientWatch 0.1.8
+
+## Fixed
+
+- Fix Paper/Purpur async safety: `PlayerClientDetectEvent` and `PlayerBlacklistedModEvent` are now dispatched as synchronous events on the main thread.
+- Added a channel-log to help debug client mod-list detection on Fabric/CheckHacks-like clients.
+
+# ClientWatch 0.7.8
+
+## Fixed
+
+- Fix Paper/Purpur async safety: `PlayerClientDetectEvent` and `PlayerBlacklistedModEvent` are now dispatched as synchronous events on the main thread.
+
 # ClientWatch 0.1.7
+
+
 
 ## Added
 

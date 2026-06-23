@@ -30,6 +30,12 @@ public final class ClientDetectionService implements PluginMessageListener {
     // The old implementation used "FML|HS" which crashes plugin enable/disable.
     private static final String FML_HANDSHAKE_CHANNEL = "fml:hs";
 
+    // Fabric-specific plugin message channels (varies by loader/mod implementation).
+    // We register these in addition to fml:hs and log what actually arrives.
+    private static final String FABRIC_HANDSHAKE_CHANNEL_1 = "fml:handshake";
+    private static final String FABRIC_HANDSHAKE_CHANNEL_2 = "fabric:handshake";
+    private static final String FABRIC_MODS_CHANNEL_1 = "fabric:mods";
+
     private final JavaPlugin plugin;
     private final DetectionRepository repository;
     private final BlacklistService blacklistService;
@@ -67,6 +73,15 @@ public final class ClientDetectionService implements PluginMessageListener {
 
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
         plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + FML_HANDSHAKE_CHANNEL);
+
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FABRIC_HANDSHAKE_CHANNEL_1, this);
+        plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + FABRIC_HANDSHAKE_CHANNEL_1);
+
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FABRIC_HANDSHAKE_CHANNEL_2, this);
+        plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + FABRIC_HANDSHAKE_CHANNEL_2);
+
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, FABRIC_MODS_CHANNEL_1, this);
+        plugin.getLogger().info("[ClientWatch] Registered plugin channel: " + FABRIC_MODS_CHANNEL_1);
     }
 
     public void unregister() {
@@ -75,6 +90,15 @@ public final class ClientDetectionService implements PluginMessageListener {
 
         plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FML_HANDSHAKE_CHANNEL, this);
         plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FML_HANDSHAKE_CHANNEL);
+
+        plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FABRIC_HANDSHAKE_CHANNEL_1, this);
+        plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FABRIC_HANDSHAKE_CHANNEL_1);
+
+        plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FABRIC_HANDSHAKE_CHANNEL_2, this);
+        plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FABRIC_HANDSHAKE_CHANNEL_2);
+
+        plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, FABRIC_MODS_CHANNEL_1, this);
+        plugin.getLogger().info("[ClientWatch] Unregistered plugin channel: " + FABRIC_MODS_CHANNEL_1);
     }
 
     public void detect(Player player) {
@@ -92,6 +116,12 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+        // Always log incoming channels while debugging mods issues.
+        // This line is intentionally not guarded by config.debug: if the server prints it,
+        // we know the listener is actually receiving plugin messages.
+        plugin.getLogger().info("[ClientWatch] Incoming plugin message channel=" + channel + " player=" + player.getName() + " bytes=" + message.length + " first16=" + toHex(message, 16));
+
+
         if (BRAND_CHANNEL.equals(channel)) {
             // store brand from plugin message and schedule save on the main thread
             String decoded = decodeBrand(message);
@@ -99,14 +129,23 @@ public final class ClientDetectionService implements PluginMessageListener {
             if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
                 plugin.getLogger().info("[debug] Received plugin-brand for " + player.getName() + ": " + decoded);
             }
+            // BRAND packets can arrive after join; avoid firing detection multiple times if another save is already scheduled.
+            // We just schedule detection here; repository.save is idempotent-ish for in-memory storage.
             Bukkit.getScheduler().runTask(plugin, () -> saveDetection(player));
-        } else if (FML_HANDSHAKE_CHANNEL.equals(channel)) {
+        } else if (FML_HANDSHAKE_CHANNEL.equals(channel) || FABRIC_HANDSHAKE_CHANNEL_1.equals(channel) || FABRIC_HANDSHAKE_CHANNEL_2.equals(channel) || FABRIC_MODS_CHANNEL_1.equals(channel)) {
             // Parse Fabric/Forge mod handshake and store mods
+            if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                plugin.getLogger().info("[debug] Received handshake payload for channel=" + channel + " player=" + player.getName() + " bytes=" + message.length + "/ first16=" + toHex(message, 16));
+            }
             List<ModInfo> mods = parseFmlHandshake(message);
             if (!mods.isEmpty()) {
                 playerMods.put(player.getUniqueId(), mods);
                 if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
                     plugin.getLogger().info("[debug] Parsed " + mods.size() + " mods from FML|HS for " + player.getName());
+                }
+            } else {
+                if (plugin instanceof com.clientwatch.ClientWatchPlugin cw && cw.isDebugEnabled()) {
+                    plugin.getLogger().info("[debug] Parsed 0 mods from FML|HS for " + player.getName() + " (payload length=" + message.length + ")");
                 }
             }
         }
@@ -171,7 +210,9 @@ public final class ClientDetectionService implements PluginMessageListener {
                 plugin.getLogger().info("[debug] repository.save completed for " + detection.playerName() + " uuid=" + detection.uuid());
             }
             Bukkit.getScheduler().runTask(plugin, () -> {
-                Bukkit.getPluginManager().callEvent(new PlayerClientDetectEvent(detection, true));
+                // Paper/Purpur require Bukkit events like this to be fired on the main thread.
+                // We dispatch explicitly on the main thread and mark the event as synchronous.
+                Bukkit.getPluginManager().callEvent(new PlayerClientDetectEvent(detection, false));
                 logService.write(detection);
             });
         }).exceptionally(ex -> {
@@ -182,7 +223,8 @@ public final class ClientDetectionService implements PluginMessageListener {
         });
         if (!matches.isEmpty()) {
             Bukkit.getScheduler().runTask(plugin, () -> {
-                Bukkit.getPluginManager().callEvent(new PlayerBlacklistedModEvent(detection, true));
+                // Event must be considered synchronous on the main thread.
+                Bukkit.getPluginManager().callEvent(new PlayerBlacklistedModEvent(detection, false));
                 actionService.handleBlacklistMatch(detection);
             });
         }
@@ -311,4 +353,16 @@ public final class ClientDetectionService implements PluginMessageListener {
 
     private record VarInt(int value, int bytesRead) {
     }
+
+    private String toHex(byte[] bytes, int limit) {
+        int l = Math.min(limit, bytes.length);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < l; i++) {
+            sb.append(String.format("%02x", bytes[i]));
+            if (i + 1 < l) sb.append(' ');
+        }
+        if (bytes.length > l) sb.append(" ...");
+        return sb.toString();
+    }
 }
+
